@@ -1,0 +1,8 @@
+services:
+  acme-delegate-cloudflare:
+    image: hugojosefson/acme-delegate-cloudflare
+    environment:
+      CF_API_EMAIL: "..."
+      CF_API_KEY: "..."
+    ports:
+      - "443:443"
