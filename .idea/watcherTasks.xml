@@ -4,6 +4,7 @@
     <enabled-global>
       <option value="deno fmt .ts" />
       <option value="deno fmt .md" />
+      <option value="deno task readme" />
     </enabled-global>
   </component>
 </project>
