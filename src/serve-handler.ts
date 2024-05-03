@@ -36,44 +36,48 @@ export const serveHandler: Deno.ServeHandler = async (
     return log(req, info, respond(403), `not internal: ${s(ip)}`);
   }
 
+  if (!["/present", "/cleanup"].includes(path)) {
+    return log(req, info, respond(404), `unexpected path: ${s(path)}`);
+  }
+
+  if (method.toUpperCase() !== "POST") {
+    return log(
+      req,
+      info,
+      respond(405),
+      s(method),
+    );
+  }
+
+  const body = await req.json();
+  if (!isValidRequest(body)) {
+    return await logWithBody(req, info, respond(400), "invalid request");
+  }
+
+  const domain: Domain = getDomainFromRequest(body);
+  const domainIps: IpAddressString[] = await resolveDomainToIps(domain);
+  if (domainIps.some(not(isInternalIp))) {
+    return log(
+      req,
+      info,
+      respond(403),
+      `invalid domain: ${
+        s(domain)
+      } because it resolves to at least one external IP: ${s(domainIps)}`,
+    );
+  }
+  if (!domainIps.includes(ip)) {
+    return log(
+      req,
+      info,
+      respond(403),
+      `invalid domain: ${
+        s(domain)
+      } because it does not resolve to the caller's IP: ${s(ip)}`,
+    );
+  }
+
   if (path === "/present") {
-    if (method.toUpperCase() !== "POST") {
-      return log(
-        req,
-        info,
-        respond(405),
-        s(method),
-      );
-    }
-
-    const body = await req.json();
-    if (!isValidRequest(body)) {
-      return await logWithBody(req, info, respond(400), "invalid request");
-    }
-
-    const domain: Domain = getDomainFromRequest(body);
-    const domainIps: IpAddressString[] = await resolveDomainToIps(domain);
-    if (domainIps.some(not(isInternalIp))) {
-      return log(
-        req,
-        info,
-        respond(403),
-        `invalid domain: ${
-          s(domain)
-        } because it resolves to at least one external IP: ${s(domainIps)}`,
-      );
-    }
-    if (!domainIps.includes(ip)) {
-      return log(
-        req,
-        info,
-        respond(403),
-        `invalid domain: ${
-          s(domain)
-        } because it does not resolve to the caller's IP: ${s(ip)}`,
-      );
-    }
-
     if (isDefaultModeRequest(body)) {
       // TODO: implement
       return log(
@@ -99,5 +103,33 @@ export const serveHandler: Deno.ServeHandler = async (
       `valid request?, but neither default nor raw mode`,
     );
   }
+
+  if (path === "/cleanup") {
+    if (isDefaultModeRequest(body)) {
+      // TODO: implement
+      return log(
+        req,
+        info,
+        respond(200),
+        `default mode request, allowed`,
+      );
+    }
+    if (isRawModeRequest(body)) {
+      // TODO: implement
+      return log(
+        req,
+        info,
+        respond(200),
+        `raw mode request, allowed`,
+      );
+    }
+    return log(
+      req,
+      info,
+      respond(500),
+      `valid request?, but neither default nor raw mode`,
+    );
+  }
+
   return respond(404);
 };
