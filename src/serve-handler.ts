@@ -1,12 +1,15 @@
+import { not } from "https://deno.land/x/fns@1.1.1/fn/not.ts";
 import { s } from "https://deno.land/x/fns@1.1.1/string/s.ts";
 import { Domain, resolveDomainToIps } from "./domain.ts";
 import { getDomainFromRequest } from "./get-domain-from-request.ts";
-import { isInternalIp, isIpAddressString } from "./ip.ts";
+import { IpAddressString, isInternalIp, isIpAddressString } from "./ip.ts";
+import { log, logWithBody } from "./log.ts";
 import {
   isDefaultModeRequest,
   isRawModeRequest,
   isValidRequest,
 } from "./request.ts";
+import { respond } from "./response.ts";
 
 export const serveHandler: Deno.ServeHandler = async (
   req: Request,
@@ -17,72 +20,84 @@ export const serveHandler: Deno.ServeHandler = async (
   const path = new URL(url).pathname;
 
   if (remoteAddr.transport !== "tcp") {
-    throw new Error("Expected TCP transport");
+    return log(
+      req,
+      info,
+      respond(400),
+      `unexpected transport: ${s(remoteAddr.transport)}`,
+    );
   }
 
   const ip = remoteAddr.hostname;
   if (!isIpAddressString(ip)) {
-    console.log(`${method} ${url} from ${ip}, invalid IP address.`);
-    return new Response("Bad Request", {
-      status: 400,
-      statusText: "Bad Request",
-    });
+    return log(req, info, respond(500), `invalid IP address: ${s(ip)}`);
   }
   if (!isInternalIp(ip)) {
-    console.log(`${method} ${url} from ${ip}, forbidden.`);
-    return new Response(
-      "Forbidden",
-      {
-        status: 403,
-        statusText: "Forbidden",
-      },
-    );
+    return log(req, info, respond(403), `not internal: ${s(ip)}`);
   }
-
-  if (method.toUpperCase() !== "POST") {
-    console.log(
-      `${method} ${path} from ${ip}, method not allowed.`,
-    );
-    return new Response("Method Not Allowed", {
-      status: 405,
-      statusText: "Method Not Allowed",
-    });
-  }
-
-  const body = await req.json();
-  console.log(
-    `${method} ${path} from ${ip}, body: ${s(body)}, isDefaultModeRequest: ${
-      isDefaultModeRequest(body)
-    }, isRawModeRequest: ${isRawModeRequest(body)}.`,
-  );
 
   if (path === "/present") {
-    if (!isValidRequest(body)) {
-      console.log(
-        `${method} ${path} from ${ip}, invalid request.`,
+    if (method.toUpperCase() !== "POST") {
+      return log(
+        req,
+        info,
+        respond(405),
+        s(method),
       );
-      return new Response("Bad Request", {
-        status: 400,
-        statusText: "Bad Request",
-      });
+    }
+
+    const body = await req.json();
+    if (!isValidRequest(body)) {
+      return await logWithBody(req, info, respond(400), "invalid request");
     }
 
     const domain: Domain = getDomainFromRequest(body);
-    console.log(
-      `${method} ${path} from ${ip}, domain: ${domain}.`,
-    );
-
-    const resolvedDomains: string[] = await resolveDomainToIps(domain);
-    console.log(
-      `${method} ${path} from ${ip}, resolved domain: ${resolvedDomains}.`,
-    );
-
-    if (isDefaultModeRequest(req.body)) {
-      console.log(
-        `${method} ${path} from ${ip}, with a default mode request, allowed.`,
+    const domainIps: IpAddressString[] = await resolveDomainToIps(domain);
+    if (domainIps.some(not(isInternalIp))) {
+      return log(
+        req,
+        info,
+        respond(403),
+        `invalid domain: ${
+          s(domain)
+        } because it resolves to at least one external IP: ${s(domainIps)}`,
       );
     }
-    console.log(`${method} ${path} from ${ip}, allowed.`);
+    if (!domainIps.includes(ip)) {
+      return log(
+        req,
+        info,
+        respond(403),
+        `invalid domain: ${
+          s(domain)
+        } because it does not resolve to the caller's IP: ${s(ip)}`,
+      );
+    }
+
+    if (isDefaultModeRequest(body)) {
+      // TODO: implement
+      return log(
+        req,
+        info,
+        respond(200),
+        `default mode request, allowed`,
+      );
+    }
+    if (isRawModeRequest(body)) {
+      // TODO: implement
+      return log(
+        req,
+        info,
+        respond(200),
+        `raw mode request, allowed`,
+      );
+    }
+    return log(
+      req,
+      info,
+      respond(500),
+      `valid request?, but neither default nor raw mode`,
+    );
   }
-  return new Response("Not Found", { status: 404, statusText: "Not Found" });
+  return respond(404);
 };
