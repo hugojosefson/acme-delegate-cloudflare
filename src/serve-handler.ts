@@ -5,9 +5,11 @@ import { getDomainFromRequest } from "./get-domain-from-request.ts";
 import { IpAddressString, isInternalIp, isIpAddressString } from "./ip.ts";
 import { log, logWithBody } from "./log.ts";
 import {
+  DefaultModeRequest,
   isDefaultModeRequest,
-  isRawModeRequest,
   isValidRequest,
+  rawModeRequestToDefaultModeRequest,
+  ValidRequest,
 } from "./request.ts";
 import { respond } from "./response.ts";
 
@@ -54,7 +56,8 @@ export const serveHandler: Deno.ServeHandler = async (
     return await logWithBody(req, info, respond(400), "invalid request");
   }
 
-  const domain: Domain = getDomainFromRequest(body);
+  const validRequest: ValidRequest = body;
+  const domain: Domain = getDomainFromRequest(validRequest);
   const domainIps: IpAddressString[] = await resolveDomainToIps(domain);
   if (domainIps.some(not(isInternalIp))) {
     return log(
@@ -77,59 +80,18 @@ export const serveHandler: Deno.ServeHandler = async (
     );
   }
 
+  const _defaultModeRequest: DefaultModeRequest =
+    isDefaultModeRequest(validRequest)
+      ? validRequest
+      : await rawModeRequestToDefaultModeRequest(validRequest);
+
   if (path === "/present") {
-    if (isDefaultModeRequest(body)) {
-      // TODO: implement
-      return log(
-        req,
-        info,
-        respond(200),
-        `default mode request, allowed`,
-      );
-    }
-    if (isRawModeRequest(body)) {
-      // TODO: implement
-      return log(
-        req,
-        info,
-        respond(200),
-        `raw mode request, allowed`,
-      );
-    }
-    return log(
-      req,
-      info,
-      respond(500),
-      `valid request?, but neither default nor raw mode`,
-    );
+    // TODO: implement using defaultModeRequest
   }
 
   if (path === "/cleanup") {
-    if (isDefaultModeRequest(body)) {
-      // TODO: implement
-      return log(
-        req,
-        info,
-        respond(200),
-        `default mode request, allowed`,
-      );
-    }
-    if (isRawModeRequest(body)) {
-      // TODO: implement
-      return log(
-        req,
-        info,
-        respond(200),
-        `raw mode request, allowed`,
-      );
-    }
-    return log(
-      req,
-      info,
-      respond(500),
-      `valid request?, but neither default nor raw mode`,
-    );
+    // TODO: implement using defaultModeRequest
   }
 
-  return respond(404);
+  return log(req, info, respond(404), `unexpected path: ${s(path)}`);
 };
