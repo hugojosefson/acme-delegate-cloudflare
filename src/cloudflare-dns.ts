@@ -7,6 +7,7 @@ import {
   type ZonesV4PagePaginationArray,
 } from "npm:cloudflare@3.1.0/resources/zones/zones";
 import { findInAsyncIterable } from "./async-iterable.ts";
+import { CF_CLIENT_OPTIONS } from "./config.ts";
 import {
   ensureDomain,
   ensureFQDomain,
@@ -16,11 +17,7 @@ import {
 import { DefaultModeFqdn } from "./request.ts";
 import { splitFqdn } from "./split-fqdn.ts";
 
-const CF = new Cloudflare({
-  apiEmail: Deno.env.get("CF_API_EMAIL")!,
-  apiKey: Deno.env.get("CF_API_KEY")!,
-  apiToken: Deno.env.get("CF_API_TOKEN")!,
-});
+const CF = new Cloudflare(CF_CLIENT_OPTIONS);
 
 async function findZoneId(
   defaultModeFqdn: DefaultModeFqdn,
