@@ -60,9 +60,7 @@ export async function setTxtRecord(
   fqdn: DefaultModeFqdn,
   value: string,
 ): Promise<void> {
-  const [
-    zoneId,
-  ] = await findZoneId(fqdn);
+  const zoneId = await findZoneId(fqdn);
 
   await CF.dns.records.create({
     zone_id: zoneId,
@@ -76,7 +74,7 @@ export async function deleteTxtRecord(
   fqdn: DefaultModeFqdn,
   value: string,
 ): Promise<void> {
-  const [zoneId] = await findZoneId(fqdn);
+  const zoneId = await findZoneId(fqdn);
 
   const query = {
     zone_id: zoneId,
