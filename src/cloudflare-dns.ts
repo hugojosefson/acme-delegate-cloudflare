@@ -9,6 +9,7 @@ import {
 import { findInAsyncIterable } from "./async-iterable.ts";
 import { CF_CLIENT_OPTIONS } from "./config.ts";
 import {
+  DomainOrFQDomain,
   ensureDomain,
   ensureFQDomain,
   FQDomain,
@@ -47,6 +48,11 @@ export async function setTxtRecord(
 ): Promise<void> {
   const zoneId = await findZoneId(fqdn);
 
+  const recordIds = await findTxtRecordIds(zoneId, fqdn, value);
+  if (recordIds.length > 0) {
+    return;
+  }
+
   await CF.dns.records.create({
     zone_id: zoneId,
     type: "TXT",
@@ -60,21 +66,7 @@ export async function deleteTxtRecord(
   value: string,
 ): Promise<void> {
   const zoneId = await findZoneId(fqdn);
-
-  const query = {
-    zone_id: zoneId,
-    type: "TXT",
-    name: ensureDomain(fqdn),
-    content: value,
-  } as const;
-  const dnsRecords = await CF.dns.records.list(query);
-
-  const recordIds: string[] = dnsRecords.result
-    .filter((record) => record.type === query.type)
-    .filter((record) => record.name === query.name)
-    .filter((record) => record.content === query.content)
-    .map((record) => record.id)
-    .filter(isString);
+  const recordIds = await findTxtRecordIds(zoneId, fqdn, value);
 
   console.log(`Deleting record ids ${s(recordIds)}`);
 
@@ -86,4 +78,25 @@ export async function deleteTxtRecord(
       })
     ),
   );
+}
+
+async function findTxtRecordIds(
+  zoneId: string,
+  fqdn: DomainOrFQDomain,
+  value: string,
+): Promise<string[]> {
+  const query = {
+    zone_id: zoneId,
+    type: "TXT",
+    name: ensureDomain(fqdn),
+    content: value,
+  } as const;
+  const dnsRecords = await CF.dns.records.list(query);
+
+  return dnsRecords.result
+    .filter((record) => record.type === query.type)
+    .filter((record) => record.name === query.name)
+    .filter((record) => record.content === query.content)
+    .map((record) => record.id)
+    .filter(isString);
 }
