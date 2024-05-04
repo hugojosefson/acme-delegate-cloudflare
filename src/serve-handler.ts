@@ -17,7 +17,7 @@ import {
 } from "./request.ts";
 import { respond } from "./response.ts";
 import { deleteTxtRecord, setTxtRecord } from "./cloudflare-dns.ts";
-import { isAllowedHttpHost } from "./config.ts";
+import { isAllowedDomain, isAllowedHttpHost } from "./config.ts";
 import { swallow } from "https://deno.land/x/fns@1.1.1/fn/swallow.ts";
 
 export const serveHandler: Deno.ServeHandler = async (
@@ -83,6 +83,9 @@ export const serveHandler: Deno.ServeHandler = async (
 
   const validRequest: ValidRequest = body;
   const fqdn: FQDomain = getFQDomainFromRequest(validRequest);
+  if (!isAllowedDomain(fqdn)) {
+    return log(req, info, respond(403), `not allowed domain: ${s(fqdn)}`);
+  }
   const domainIps: IpAddressString[] = await resolveDomainRecursivelyToIps(
     fqdn,
   );
