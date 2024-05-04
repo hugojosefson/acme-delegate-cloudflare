@@ -1,6 +1,6 @@
 import { not } from "https://deno.land/x/fns@1.1.1/fn/not.ts";
 import { s } from "https://deno.land/x/fns@1.1.1/string/s.ts";
-import { Domain, resolveDomainRecursivelyToIps } from "./domain.ts";
+import { FQDomain, resolveDomainRecursivelyToIps } from "./domain.ts";
 import { getDomainFromRequest } from "./get-domain-from-request.ts";
 import {
   IpAddressString,
@@ -9,13 +9,14 @@ import {
 } from "./ip.ts";
 import { log, logWithBody } from "./log.ts";
 import {
+  DefaultModeFqdn,
   DefaultModeRequest,
-  isDefaultModeRequest,
+  ensureDefaultModeRequest,
   isValidRequest,
-  rawModeRequestToDefaultModeRequest,
   ValidRequest,
 } from "./request.ts";
 import { respond } from "./response.ts";
+import { deleteTxtRecord, setTxtRecord } from "./cloudflare-dns.ts";
 
 export const serveHandler: Deno.ServeHandler = async (
   req: Request,
@@ -61,9 +62,9 @@ export const serveHandler: Deno.ServeHandler = async (
   }
 
   const validRequest: ValidRequest = body;
-  const domain: Domain = getDomainFromRequest(validRequest);
+  const fqdn: FQDomain = getDomainFromRequest(validRequest);
   const domainIps: IpAddressString[] = await resolveDomainRecursivelyToIps(
-    domain,
+    fqdn,
   );
   if (domainIps.some(not(isInternalIpAddressString))) {
     return log(
@@ -71,7 +72,7 @@ export const serveHandler: Deno.ServeHandler = async (
       info,
       respond(403),
       `invalid domain: ${
-        s(domain)
+        s(fqdn)
       } because it resolves to at least one external IP: ${s(domainIps)}`,
     );
   }
@@ -81,22 +82,29 @@ export const serveHandler: Deno.ServeHandler = async (
       info,
       respond(403),
       `invalid domain: ${
-        s(domain)
+        s(fqdn)
       } because it does not resolve to the caller's IP: ${s(ip)}`,
     );
   }
 
-  const _defaultModeRequest: DefaultModeRequest =
-    isDefaultModeRequest(validRequest)
-      ? validRequest
-      : await rawModeRequestToDefaultModeRequest(validRequest);
+  const defaultModeRequest: DefaultModeRequest = await ensureDefaultModeRequest(
+    validRequest,
+  );
 
   if (path === "/present") {
-    // TODO: implement using defaultModeRequest
+    await setTxtRecord(
+      `_acme-challenge.${fqdn}` as DefaultModeFqdn,
+      defaultModeRequest.value,
+    );
+    return log(req, info, respond(200), `set ${s(defaultModeRequest)}`);
   }
 
   if (path === "/cleanup") {
-    // TODO: implement using defaultModeRequest
+    await deleteTxtRecord(
+      `_acme-challenge.${fqdn}` as DefaultModeFqdn,
+      defaultModeRequest.value,
+    );
+    return log(req, info, respond(200), `deleted ${s(defaultModeRequest)}`);
   }
 
   return log(req, info, respond(404), `unexpected path: ${s(path)}`);

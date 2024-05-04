@@ -1,13 +1,21 @@
+import { isString } from "https://deno.land/x/fns@1.1.1/string/is-string.ts";
+import { s } from "https://deno.land/x/fns@1.1.1/string/s.ts";
 import Cloudflare from "npm:cloudflare@3.1.0";
-import { type RecordDeleteParams } from "npm:cloudflare@3.1.0/resources/dns/records";
 import {
   type Zone,
   type ZoneListParams,
   type ZonesV4PagePaginationArray,
 } from "npm:cloudflare@3.1.0/resources/zones/zones";
 import { findInAsyncIterable } from "./async-iterable.ts";
-import { Domain, FQDomain, isDomain } from "./domain.ts";
-import { DefaultModeFqdn, isDefaultModeFqdn } from "./request.ts";
+import {
+  Domain,
+  ensureDomain,
+  ensureFQDomain,
+  isDomain,
+  isDomainOrFQDomain,
+} from "./domain.ts";
+import { DefaultModeFqdn } from "./request.ts";
+import { RecordNameFqdnPair, splitFqdn } from "./split-fqdn.ts";
 
 const CF = new Cloudflare({
   apiEmail: Deno.env.get("CF_API_EMAIL")!,
@@ -17,34 +25,46 @@ const CF = new Cloudflare({
 
 export type RecordName = Domain & { readonly __isRecordName: unique symbol };
 export function isRecordName(s: unknown): s is RecordName {
-  return isDomain(s);
+  return isDomain(s) ||
+    isString(s) && (s === "_acme-challenge" || /^[a-z0-9]$/.test(s));
 }
 
 export function getDomainFromDefaultModeFqdn(fqdn: DefaultModeFqdn): Domain {
   return fqdn.slice("_acme-challenge.".length, -1) as Domain;
 }
 
-async function findZoneId(fqdn: DefaultModeFqdn): Promise<string> {
-  const query: ZoneListParams = {
-    name: getDomainFromDefaultModeFqdn(fqdn),
-  };
-  const zones: ZonesV4PagePaginationArray = await CF.zones.list(query);
-  const zone: Zone | undefined = await findInAsyncIterable(
-    zones,
-    (zone) => zone.name === query.name,
-  );
-  if (!zone) {
-    throw new Error(`Zone not found: ${query.name}`);
+async function findZoneId(
+  defaultModeFqdn: DefaultModeFqdn,
+): Promise<string> {
+  const recordNameFqdnPairs: RecordNameFqdnPair[] = splitFqdn(defaultModeFqdn);
+  for (const [_recordName, fqdn] of recordNameFqdnPairs) {
+    const query: ZoneListParams = {
+      name: ensureFQDomain(fqdn),
+    };
+    const zones: ZonesV4PagePaginationArray = await CF.zones.list(query);
+    const zone: Zone | undefined = await findInAsyncIterable(
+      zones,
+      (zone) =>
+        isDomainOrFQDomain(zone.name) &&
+        ensureFQDomain(zone.name) === ensureFQDomain(fqdn),
+    );
+    if (zone) {
+      return zone.id;
+    }
   }
-  return zone.id;
+  throw new Deno.errors.NotFound(`Zone not found for ${s(defaultModeFqdn)}`);
 }
 
 export async function setTxtRecord(
   fqdn: DefaultModeFqdn,
   value: string,
 ): Promise<void> {
+  const [
+    zoneId,
+  ] = await findZoneId(fqdn);
+
   await CF.dns.records.create({
-    zone_id: await findZoneId(fqdn),
+    zone_id: zoneId,
     type: "TXT",
     name: fqdn,
     content: value,
@@ -55,55 +75,31 @@ export async function deleteTxtRecord(
   fqdn: DefaultModeFqdn,
   value: string,
 ): Promise<void> {
-  const zoneId = await findZoneId(fqdn);
-  const dnsRecords = await CF.dns.records.list({
+  const [zoneId] = await findZoneId(fqdn);
+
+  const query = {
     zone_id: zoneId,
     type: "TXT",
-    name: fqdn,
+    name: ensureDomain(fqdn),
     content: value,
-  });
-  for (const dnsRecord of dnsRecords.result) {
-    if (dnsRecord.id === undefined) continue;
-    const deleteParams: RecordDeleteParams = {
-      zone_id: zoneId,
-      body: undefined,
-    };
-    await CF.dns.records.delete(dnsRecord.id, deleteParams);
-  }
-}
+  } as const;
+  const dnsRecords = await CF.dns.records.list(query);
 
-/**
- * Splits a {@link DefaultModeFqdn} into all possible record names and domains.
- *
- * @example
- * ```ts
- * splitFqdn("_acme-challenge.local.hugojosefson.net.")
- * // => [
- * //   ["_acme-challenge", "local.hugojosefson.net."],
- * //   ["_acme-challenge.local", "hugojosefson.net."],
- * //   ["_acme-challenge.local.hugojosefson", "net."],
- * // ]
- * ```
- * @param fqdn The default mode fqdn.
- * @returns The record names and domains.
- */
-export function splitFqdn(_fqdn: FQDomain): [RecordName, FQDomain][] {
-  // TODO: implement
-  return [];
-}
+  const recordIds: string[] = dnsRecords.result
+    .filter((record) => record.type === query.type)
+    .filter((record) => record.name === query.name)
+    .filter((record) => record.content === query.content)
+    .map((record) => record.id)
+    .filter(isString);
 
-if (import.meta.main) {
-  const fqdns = [
-    "_acme-challenge.hugojosefson.net.",
-    "_acme-challenge.hugojosefson.com.",
-    "_acme-challenge.local.hugojosefson.net.",
-    "_acme-challenge.local.hugojosefson.com.",
-    "_acme-challenge.hugojosefson.se.",
-    "_acme-challenge.local.hugojosefson.se.",
-  ].filter(isDefaultModeFqdn);
-  const entries: [DefaultModeFqdn, string][] = await Promise.all(
-    fqdns.map(async (fqdn) => [fqdn, await findZoneId(fqdn)]),
+  console.log(`Deleting record ids ${s(recordIds)}`);
+
+  await Promise.all(
+    recordIds.map((recordId) =>
+      CF.dns.records.delete(recordId, {
+        zone_id: zoneId,
+        body: undefined,
+      })
+    ),
   );
-  const obj = Object.fromEntries(entries);
-  console.table(obj);
 }

@@ -2,7 +2,7 @@ import { encodeBase64Url } from "https://deno.land/std@0.224.0/encoding/base64ur
 import { Domain, FQDomain, isDomain, isFQDomain } from "./domain.ts";
 import { sha256 } from "./sha256.ts";
 
-export type DefaultModeFqdn = `_acme-challenge.${FQDomain}`;
+export type DefaultModeFqdn = `_acme-challenge.${FQDomain}` & FQDomain;
 export type DefaultModeRequest = {
   fqdn: DefaultModeFqdn;
   value: string;
@@ -76,4 +76,13 @@ export async function rawModeRequestToDefaultModeRequest(
     fqdn: `_acme-challenge.${req.domain}.` as DefaultModeFqdn,
     value,
   };
+}
+
+export async function ensureDefaultModeRequest(
+  req: DefaultModeRequest | RawModeRequest,
+): Promise<DefaultModeRequest> {
+  if (isDefaultModeRequest(req)) {
+    return req;
+  }
+  return await rawModeRequestToDefaultModeRequest(req);
 }

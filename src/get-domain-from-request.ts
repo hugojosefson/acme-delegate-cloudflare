@@ -1,4 +1,4 @@
-import { Domain, isDomain } from "./domain.ts";
+import { ensureFQDomain, FQDomain, isDomainOrFQDomain } from "./domain.ts";
 import {
   DefaultModeRequest,
   isDefaultModeRequest,
@@ -8,23 +8,26 @@ import {
 
 export function getDomainFromDefaultModeRequest(
   req: DefaultModeRequest,
-): Domain {
+): FQDomain {
   const domain = req.fqdn.slice("_acme-challenge.".length, -1);
-  if (!isDomain(domain)) {
+  if (!isDomainOrFQDomain(domain)) {
     throw new Error(`Invalid domain: ${domain}`);
   }
-  return domain;
+  return ensureFQDomain(domain);
 }
 
 export function getDomainFromRawModeRequest(
   req: RawModeRequest,
-): Domain {
-  return req.domain;
+): FQDomain {
+  if (!isDomainOrFQDomain(req.domain)) {
+    throw new Error(`Invalid domain: ${req.domain}`);
+  }
+  return ensureFQDomain(req.domain);
 }
 
 export function getDomainFromRequest(
   req: ValidRequest,
-): Domain {
+): FQDomain {
   if (isDefaultModeRequest(req)) {
     return getDomainFromDefaultModeRequest(req);
   }

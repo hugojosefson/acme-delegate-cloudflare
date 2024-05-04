@@ -6,17 +6,41 @@ import isRfc2181DomainName from "npm:is-domain-name@1.0.1";
 
 import { RECORD_TYPES, ResolveDnsResponse } from "./dns.ts";
 import { IpAddressString, isIpAddressString } from "./ip.ts";
+import { isString } from "https://deno.land/x/fns@1.1.1/string/is-string.ts";
 
 export type Domain = string & { readonly __isDomain: unique symbol };
 export type FQDomain = `${Domain}.` & { readonly __isFQDomain: unique symbol };
 export type DomainOrFQDomain = Domain | FQDomain;
 
+export function isRfc2181DomainNameOrAcmeChallenge(
+  s: unknown,
+  rootDot: true,
+): s is FQDomain;
+export function isRfc2181DomainNameOrAcmeChallenge(
+  s: unknown,
+  rootDot: false,
+): s is Domain;
+export function isRfc2181DomainNameOrAcmeChallenge(
+  s: unknown,
+  rootDot: boolean,
+): boolean {
+  if (isRfc2181DomainName(s, rootDot)) {
+    return true;
+  }
+  if (!isString(s)) {
+    return false;
+  }
+  const [host, ...rest] = s.split(".");
+  return host === "_acme-challenge" &&
+    isRfc2181DomainName(rest.join("."), rootDot);
+}
+
 export function isDomain(s: unknown): s is Domain {
-  return isRfc2181DomainName(s, false);
+  return isRfc2181DomainNameOrAcmeChallenge(s, false);
 }
 
 export function isFQDomain(s: unknown): s is FQDomain {
-  return isRfc2181DomainName(s, true);
+  return isRfc2181DomainNameOrAcmeChallenge(s, true);
 }
 
 export function isDomainOrFQDomain(s: unknown): s is DomainOrFQDomain {
