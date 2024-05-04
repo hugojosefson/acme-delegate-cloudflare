@@ -17,14 +17,15 @@ import {
 } from "./request.ts";
 import { respond } from "./response.ts";
 import { deleteTxtRecord, setTxtRecord } from "./cloudflare-dns.ts";
+import { isAllowedHttpHost } from "./config.ts";
+import { swallow } from "https://deno.land/x/fns@1.1.1/fn/swallow.ts";
 
 export const serveHandler: Deno.ServeHandler = async (
   req: Request,
   info: Deno.ServeHandlerInfo,
 ): Promise<Response> => {
-  const { method, url } = req;
+  const { method, url: urlString } = req;
   const { remoteAddr } = info;
-  const path = new URL(url).pathname;
 
   if (remoteAddr.transport !== "tcp") {
     return log(
@@ -43,6 +44,13 @@ export const serveHandler: Deno.ServeHandler = async (
     return log(req, info, respond(403), `not internal: ${s(ip)}`);
   }
 
+  const url = new URL(urlString);
+  const host = url.host;
+  if (!isAllowedHttpHost(host)) {
+    return log(req, info, respond(404), `not allowed host: ${s(host)}`);
+  }
+
+  const path = url.pathname;
   if (!["/present", "/cleanup"].includes(path)) {
     return log(req, info, respond(404), `unexpected path: ${s(path)}`);
   }
