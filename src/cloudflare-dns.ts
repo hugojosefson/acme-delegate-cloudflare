@@ -8,11 +8,9 @@ import {
 } from "npm:cloudflare@3.1.0/resources/zones/zones";
 import { findInAsyncIterable } from "./async-iterable.ts";
 import {
-  Domain,
   ensureDomain,
   ensureFQDomain,
   FQDomain,
-  isDomain,
   isDomainOrFQDomain,
 } from "./domain.ts";
 import { DefaultModeFqdn } from "./request.ts";
@@ -23,16 +21,6 @@ const CF = new Cloudflare({
   apiKey: Deno.env.get("CF_API_KEY")!,
   apiToken: Deno.env.get("CF_API_TOKEN")!,
 });
-
-export type RecordName = Domain & { readonly __isRecordName: unique symbol };
-export function isRecordName(s: unknown): s is RecordName {
-  return isDomain(s) ||
-    isString(s) && (s === "_acme-challenge" || /^[a-z0-9]$/.test(s));
-}
-
-export function getDomainFromDefaultModeFqdn(fqdn: DefaultModeFqdn): Domain {
-  return fqdn.slice("_acme-challenge.".length, -1) as Domain;
-}
 
 async function findZoneId(
   defaultModeFqdn: DefaultModeFqdn,
