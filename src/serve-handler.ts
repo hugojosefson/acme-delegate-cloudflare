@@ -64,7 +64,19 @@ export const serveHandler: Deno.ServeHandler = async (
     );
   }
 
-  const body = await req.json();
+  const bodyString = await req.text();
+  const jsonParseErrorSymbol = Symbol("jsonParseError");
+  const body =
+    await (new Promise((resolve) => void resolve(JSON.parse(bodyString))))
+      .catch(swallow(Error, jsonParseErrorSymbol));
+  if (body === jsonParseErrorSymbol) {
+    return log(
+      req,
+      info,
+      respond(400),
+      `body is not valid JSON: ${s(bodyString)}`,
+    );
+  }
   if (!isValidRequest(body)) {
     return await logWithBody(req, info, respond(400), "invalid request");
   }
