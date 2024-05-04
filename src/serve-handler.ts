@@ -2,11 +2,7 @@ import { not } from "https://deno.land/x/fns@1.1.1/fn/not.ts";
 import { s } from "https://deno.land/x/fns@1.1.1/string/s.ts";
 import { FQDomain, resolveDomainRecursivelyToIps } from "./domain.ts";
 import { getFQDomainFromRequest } from "./get-domain-from-request.ts";
-import {
-  IpAddressString,
-  isInternalIpAddressString,
-  isIpAddressString,
-} from "./ip.ts";
+import { IpAddressString, isIpAddressString } from "./ip.ts";
 import { log, logWithBody } from "./log.ts";
 import {
   DefaultModeFqdn,
@@ -17,7 +13,12 @@ import {
 } from "./request.ts";
 import { respond } from "./response.ts";
 import { deleteTxtRecord, setTxtRecord } from "./cloudflare-dns.ts";
-import { isAllowedDomain, isAllowedHttpHost } from "./config.ts";
+import {
+  ALLOW_IP_RANGES,
+  isAllowedDomain,
+  isAllowedHttpHost,
+  isAllowedIp,
+} from "./config.ts";
 import { swallow } from "https://deno.land/x/fns@1.1.1/fn/swallow.ts";
 
 export const serveHandler: Deno.ServeHandler = async (
@@ -40,8 +41,8 @@ export const serveHandler: Deno.ServeHandler = async (
   if (!isIpAddressString(ip)) {
     return log(req, info, respond(500), `invalid IP address: ${s(ip)}`);
   }
-  if (!isInternalIpAddressString(ip)) {
-    return log(req, info, respond(403), `not internal: ${s(ip)}`);
+  if (!isAllowedIp(ip)) {
+    return log(req, info, respond(403), `not allowed IP: ${s(ip)}`);
   }
 
   const url = new URL(urlString);
@@ -89,14 +90,16 @@ export const serveHandler: Deno.ServeHandler = async (
   const domainIps: IpAddressString[] = await resolveDomainRecursivelyToIps(
     fqdn,
   );
-  if (domainIps.some(not(isInternalIpAddressString))) {
+  if (domainIps.some(not(isAllowedIp))) {
     return log(
       req,
       info,
       respond(403),
       `invalid domain: ${
         s(fqdn)
-      } because it resolves to at least one external IP: ${s(domainIps)}`,
+      } because it resolves to at least one disallowed IP: ${
+        s(domainIps)
+      }; allowed IP ranges: ${ALLOW_IP_RANGES}`,
     );
   }
   if (!domainIps.includes(ip)) {
