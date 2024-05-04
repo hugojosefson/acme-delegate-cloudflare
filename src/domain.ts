@@ -1,48 +1,100 @@
+import { or } from "https://deno.land/x/fns@1.1.1/fn/or.ts";
 import { swallow } from "https://deno.land/x/fns@1.1.1/fn/swallow.ts";
 import { s } from "https://deno.land/x/fns@1.1.1/string/s.ts";
-import { not } from "https://deno.land/x/fns@1.1.1/fn/not.ts";
+import { sortUnique } from "https://raw.githubusercontent.com/hugojosefson/fns/sort-unique-generic/string/sort-unique.ts";
+import isRfc2181DomainName from "npm:is-domain-name@1.0.1";
 
 import { RECORD_TYPES, ResolveDnsResponse } from "./dns.ts";
 import { IpAddressString, isIpAddressString } from "./ip.ts";
 
-export type Domain = `${string}.${string}`;
+export type Domain = string & { readonly __isDomain: unique symbol };
+export type FQDomain = `${Domain}.` & { readonly __isFQDomain: unique symbol };
+export type DomainOrFQDomain = Domain | FQDomain;
 
 export function isDomain(s: unknown): s is Domain {
-  if (typeof s !== "string") {
-    return false;
-  }
-  return /^[^.]+(\.[^.]+)+$/.test(s);
+  return isRfc2181DomainName(s, false);
 }
 
-export async function resolveDomainToIps(
-  domain: Domain,
-): Promise<IpAddressString[]> {
-  console.log(`Resolving ${domain}`);
+export function isFQDomain(s: unknown): s is FQDomain {
+  return isRfc2181DomainName(s, true);
+}
+
+export function isDomainOrFQDomain(s: unknown): s is DomainOrFQDomain {
+  return isDomain(s) || isFQDomain(s);
+}
+
+export function toFQDomain(s: Domain): FQDomain {
+  return `${s}.` as FQDomain;
+}
+
+export function toDomain(s: FQDomain): Domain {
+  return s.slice(0, -1) as Domain;
+}
+
+export function ensureFQDomain(s: Domain | FQDomain): FQDomain {
+  return isFQDomain(s) ? s : toFQDomain(s);
+}
+
+export function ensureDomain(s: Domain | FQDomain): Domain {
+  return isDomain(s) ? s : toDomain(s);
+}
+
+export async function resolveDomain(
+  domain: Domain | FQDomain,
+): Promise<Array<FQDomain | IpAddressString>> {
+  const domainFQ: FQDomain = ensureFQDomain(domain);
+
   const promises: Promise<ResolveDnsResponse>[] = RECORD_TYPES.map((type) =>
-    Deno.resolveDns(domain, type).catch(swallow(Deno.errors.NotFound, []))
+    Deno.resolveDns(domainFQ, type).catch(swallow(Deno.errors.NotFound, []))
   );
-
   const resolved: ResolveDnsResponse[] = await Promise.all(promises);
-  console.log(`Resolved ${domain}: ${s(resolved)}`);
 
-  const records = [...new Set(resolved.flat(2) as string[])].sort();
-  console.log(`Unique records for ${domain}: ${s(records)}`);
+  /** because of the {@link RECORD_TYPES}, responses are always strings*/
+  const toFilter = resolved.flat(2) as string[];
+  const domains: Domain[] = toFilter.filter(isDomain);
+  const domainsAsFqDomains: FQDomain[] = domains.map(toFQDomain);
+  return sortUnique([
+    ...domainsAsFqDomains,
+    ...toFilter.filter(or(isFQDomain, isIpAddressString)) as Array<
+      FQDomain | IpAddressString
+    >,
+  ]);
+}
+
+export async function resolveDomainRecursivelyToIps(
+  domain: Domain | FQDomain,
+): Promise<IpAddressString[]> {
+  const fqDomain: FQDomain = ensureFQDomain(domain);
+  console.log(`Resolving ${fqDomain} recursively`);
+
+  const records = await resolveDomain(fqDomain);
+  console.log(`Unique records for ${fqDomain}: ${s(records)}`);
 
   const ips: IpAddressString[] = records.filter(isIpAddressString);
-  console.log(`IPs for ${domain}: ${s(ips)}`);
+  console.log(`IPs for ${fqDomain}: ${s(ips)}`);
 
-  const domains: Domain[] = records
-    .filter(not(isIpAddressString))
-    .map((record) => record.replace(/\.$/, ""))
-    .filter(isDomain);
-  console.log(`Domains for ${domain}: ${s(domains)}`);
+  const fqDomains: FQDomain[] = records.filter(isFQDomain);
+  console.log(`FQDomains for ${fqDomain}: ${s(fqDomains)}`);
 
-  const resolvedDomains = (await Promise.all(domains.map(resolveDomainToIps)))
-    .flat(
-      2,
-    );
-  console.log(`Resolved domains for ${domain}: ${s(resolvedDomains)}`);
+  const fqDomainsAsIps =
+    (await Promise.all(fqDomains.map(resolveDomainRecursivelyToIps)))
+      .flat(
+        2,
+      );
+  console.log(`fqDomainsAsIps for ${fqDomain}: ${s(fqDomainsAsIps)}`);
 
-  console.log(`Returning ${s([...ips, ...resolvedDomains])} for ${domain}.`);
-  return [...ips, ...resolvedDomains];
+  const result: IpAddressString[] = sortUnique([...ips, ...fqDomainsAsIps]);
+  console.log(`Returning ${s(result)} for ${fqDomain}.`);
+  return result;
+}
+
+if (import.meta.main) {
+  const domains = Deno.args.filter(isDomainOrFQDomain);
+  const entries: [DomainOrFQDomain, IpAddressString[]][] = await Promise.all(
+    domains.map(async (
+      domain,
+    ) => [domain, await resolveDomainRecursivelyToIps(domain)]),
+  );
+  const obj = Object.fromEntries(entries);
+  console.table(obj);
 }

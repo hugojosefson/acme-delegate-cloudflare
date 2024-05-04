@@ -1,6 +1,6 @@
 import { not } from "https://deno.land/x/fns@1.1.1/fn/not.ts";
 import { s } from "https://deno.land/x/fns@1.1.1/string/s.ts";
-import { Domain, resolveDomainToIps } from "./domain.ts";
+import { Domain, resolveDomainRecursivelyToIps } from "./domain.ts";
 import { getDomainFromRequest } from "./get-domain-from-request.ts";
 import { IpAddressString, isInternalIp, isIpAddressString } from "./ip.ts";
 import { log, logWithBody } from "./log.ts";
@@ -58,7 +58,9 @@ export const serveHandler: Deno.ServeHandler = async (
 
   const validRequest: ValidRequest = body;
   const domain: Domain = getDomainFromRequest(validRequest);
-  const domainIps: IpAddressString[] = await resolveDomainToIps(domain);
+  const domainIps: IpAddressString[] = await resolveDomainRecursivelyToIps(
+    domain,
+  );
   if (domainIps.some(not(isInternalIp))) {
     return log(
       req,
