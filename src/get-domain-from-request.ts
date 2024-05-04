@@ -6,7 +6,7 @@ import {
   ValidRequest,
 } from "./request.ts";
 
-export function getDomainFromDefaultModeRequest(
+export function getFQDomainFromDefaultModeRequest(
   req: DefaultModeRequest,
 ): FQDomain {
   const domain = req.fqdn.slice("_acme-challenge.".length, -1);
@@ -16,7 +16,7 @@ export function getDomainFromDefaultModeRequest(
   return ensureFQDomain(domain);
 }
 
-export function getDomainFromRawModeRequest(
+export function getFQDomainFromRawModeRequest(
   req: RawModeRequest,
 ): FQDomain {
   if (!isDomainOrFQDomain(req.domain)) {
@@ -25,11 +25,11 @@ export function getDomainFromRawModeRequest(
   return ensureFQDomain(req.domain);
 }
 
-export function getDomainFromRequest(
+export function getFQDomainFromRequest(
   req: ValidRequest,
 ): FQDomain {
   if (isDefaultModeRequest(req)) {
-    return getDomainFromDefaultModeRequest(req);
+    return getFQDomainFromDefaultModeRequest(req);
   }
-  return getDomainFromRawModeRequest(req);
+  return getFQDomainFromRawModeRequest(req);
 }

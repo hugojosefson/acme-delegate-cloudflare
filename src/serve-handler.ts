@@ -1,7 +1,7 @@
 import { not } from "https://deno.land/x/fns@1.1.1/fn/not.ts";
 import { s } from "https://deno.land/x/fns@1.1.1/string/s.ts";
 import { FQDomain, resolveDomainRecursivelyToIps } from "./domain.ts";
-import { getDomainFromRequest } from "./get-domain-from-request.ts";
+import { getFQDomainFromRequest } from "./get-domain-from-request.ts";
 import {
   IpAddressString,
   isInternalIpAddressString,
@@ -82,7 +82,7 @@ export const serveHandler: Deno.ServeHandler = async (
   }
 
   const validRequest: ValidRequest = body;
-  const fqdn: FQDomain = getDomainFromRequest(validRequest);
+  const fqdn: FQDomain = getFQDomainFromRequest(validRequest);
   const domainIps: IpAddressString[] = await resolveDomainRecursivelyToIps(
     fqdn,
   );
