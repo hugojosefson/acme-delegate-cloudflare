@@ -6,7 +6,7 @@ export const CF_CLIENT_OPTIONS: Partial<ClientOptions> = {
   apiToken: Deno.env.get("CF_API_TOKEN"),
 };
 
-export const HTTP_HOSTS: undefined | string[] = Deno.env.get(
+const HTTP_HOSTS: undefined | string[] = Deno.env.get(
   "HTTP_HOSTS",
 )
   ?.split(",")
@@ -18,4 +18,24 @@ export function isAllowedHttpHost(s: string): boolean {
     return true;
   }
   return HTTP_HOSTS.includes(s);
+}
+
+const LISTEN_ADDRESS_DEFAULT = "0.0.0.0";
+const LISTEN_PORT_DEFAULT = "80";
+
+export const LISTEN_ADDRESS: string = Deno.env.get("LISTEN_ADDRESS") ??
+  LISTEN_ADDRESS_DEFAULT;
+
+export const LISTEN_PORT: number = getListenPort();
+
+function getListenPort(): number {
+  const stringOrUndefined = Deno.env.get("LISTEN_PORT");
+  const number = parseInt(
+    stringOrUndefined ?? LISTEN_PORT_DEFAULT,
+    10,
+  );
+  if (isNaN(number)) {
+    throw new Error(`Invalid LISTEN_PORT: ${number}`);
+  }
+  return number;
 }
