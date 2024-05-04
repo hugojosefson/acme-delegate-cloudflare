@@ -2,7 +2,11 @@ import { not } from "https://deno.land/x/fns@1.1.1/fn/not.ts";
 import { s } from "https://deno.land/x/fns@1.1.1/string/s.ts";
 import { Domain, resolveDomainRecursivelyToIps } from "./domain.ts";
 import { getDomainFromRequest } from "./get-domain-from-request.ts";
-import { IpAddressString, isInternalIp, isIpAddressString } from "./ip.ts";
+import {
+  IpAddressString,
+  isInternalIpAddressString,
+  isIpAddressString,
+} from "./ip.ts";
 import { log, logWithBody } from "./log.ts";
 import {
   DefaultModeRequest,
@@ -34,7 +38,7 @@ export const serveHandler: Deno.ServeHandler = async (
   if (!isIpAddressString(ip)) {
     return log(req, info, respond(500), `invalid IP address: ${s(ip)}`);
   }
-  if (!isInternalIp(ip)) {
+  if (!isInternalIpAddressString(ip)) {
     return log(req, info, respond(403), `not internal: ${s(ip)}`);
   }
 
@@ -61,7 +65,7 @@ export const serveHandler: Deno.ServeHandler = async (
   const domainIps: IpAddressString[] = await resolveDomainRecursivelyToIps(
     domain,
   );
-  if (domainIps.some(not(isInternalIp))) {
+  if (domainIps.some(not(isInternalIpAddressString))) {
     return log(
       req,
       info,

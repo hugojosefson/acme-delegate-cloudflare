@@ -1,8 +1,8 @@
 import { encodeBase64Url } from "https://deno.land/std@0.224.0/encoding/base64url.ts";
-import { Domain, isDomain } from "./domain.ts";
+import { Domain, FQDomain, isDomain, isFQDomain } from "./domain.ts";
 import { sha256 } from "./sha256.ts";
 
-export type DefaultModeFqdn = `_acme-challenge.${Domain}.`;
+export type DefaultModeFqdn = `_acme-challenge.${FQDomain}`;
 export type DefaultModeRequest = {
   fqdn: DefaultModeFqdn;
   value: string;
@@ -19,10 +19,7 @@ export type ValidRequest =
   | RawModeRequest;
 
 export function isDefaultModeFqdn(s: unknown): s is DefaultModeFqdn {
-  if (typeof s !== "string") {
-    return false;
-  }
-  return /^_acme-challenge\.[^.]+(\.[^.]+)+\.$/.test(s);
+  return isFQDomain(s) && s.startsWith("_acme-challenge.");
 }
 
 export function isDefaultModeRequest(
@@ -76,7 +73,7 @@ export async function rawModeRequestToDefaultModeRequest(
   const digest: ArrayBuffer = await sha256(req.keyAuth);
   const value: string = encodeBase64Url(digest);
   return {
-    fqdn: `_acme-challenge.${req.domain}.`,
+    fqdn: `_acme-challenge.${req.domain}.` as DefaultModeFqdn,
     value,
   };
 }
