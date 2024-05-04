@@ -24,6 +24,9 @@ export function isRfc2181DomainNameOrAcmeChallenge(
   s: unknown,
   rootDot: boolean,
 ): boolean {
+  if (isIpAddressString(s)) {
+    return false;
+  }
   if (isRfc2181DomainName(s, rootDot)) {
     return true;
   }
