@@ -11,11 +11,12 @@ import {
   Domain,
   ensureDomain,
   ensureFQDomain,
+  FQDomain,
   isDomain,
   isDomainOrFQDomain,
 } from "./domain.ts";
 import { DefaultModeFqdn } from "./request.ts";
-import { RecordNameFqdnPair, splitFqdn } from "./split-fqdn.ts";
+import { splitFqdn } from "./split-fqdn.ts";
 
 const CF = new Cloudflare({
   apiEmail: Deno.env.get("CF_API_EMAIL")!,
@@ -36,8 +37,8 @@ export function getDomainFromDefaultModeFqdn(fqdn: DefaultModeFqdn): Domain {
 async function findZoneId(
   defaultModeFqdn: DefaultModeFqdn,
 ): Promise<string> {
-  const recordNameFqdnPairs: RecordNameFqdnPair[] = splitFqdn(defaultModeFqdn);
-  for (const [_recordName, fqdn] of recordNameFqdnPairs) {
+  const fqdns: FQDomain[] = splitFqdn(defaultModeFqdn);
+  for (const fqdn of fqdns) {
     const query: ZoneListParams = {
       name: ensureFQDomain(fqdn),
     };
