@@ -5,4 +5,4 @@ EXPOSE 10101
 
 ADD . /app
 RUN deno cache main.ts
-CMD ["run", "--allow-net", "--allow-read=.", "--allow-env", "--allow-write=.", "main.ts"]
+CMD ["run", "--allow-net", "--allow-read=.", "--allow-env", "main.ts"]
